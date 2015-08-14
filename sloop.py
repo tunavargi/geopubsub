@@ -1,11 +1,12 @@
 import json
 import requests
 
-SLOOP_APP_KEY = 'cdc4cf2cd170233f12a9b1'
+SLOOP_APP_KEY = '55cdef8d2cd170233f12ab76'
 SLOOP_APP_TOKEN = '123456788'
 
 SLOOP_SERVER_DOMAIN = "http://pushserver.hipo.biz:8193"
 SLOOP_DEVICE_TOKEN_PATH_TEMPLATE = "/application/%s/device/notify"
+SLOOP_REGISTER_URL = 'http://pushserver.hipo.biz:8193/application/%s/device' % (SLOOP_APP_KEY)
 
 
 class Device(object):
@@ -39,6 +40,7 @@ class Device(object):
         """
         Process the message coming from sloop
         """
+        print(data)
         pass
 
     def get_server_call_url(self):
@@ -47,7 +49,8 @@ class Device(object):
         """
         sloop_server_domain = SLOOP_SERVER_DOMAIN
         sloop_device_token_path_template = SLOOP_DEVICE_TOKEN_PATH_TEMPLATE
-        url = sloop_server_domain + sloop_device_token_path_template % SLOOP_APP_KEY
+        import ipdb; ipdb.set_trace()
+        url = sloop_server_domain + sloop_device_token_path_template % self.token
         url = url + "?token=" + SLOOP_APP_TOKEN
 
         return url
@@ -56,12 +59,17 @@ class Device(object):
         """
         Sends push message using device token
         """
+        data = {'type': self.device_type, 'device_token': self.token}
+
+        response = requests.post(('%s?token=%s' % (SLOOP_REGISTER_URL, SLOOP_APP_TOKEN)), data=json.dumps(data))
+        device_token = response.json().get('resp').get('id')
+        self.token = device_token
         extra_data = self.get_extra_data(extra)
         if url:
             extra_data["url"] = url
 
         data = {
-            'device_token': self.token,
+            'device_token': device_token,
             'device_type': self.device_type,
             'alert': self.prepare_message(message),
             'sound': sound,
