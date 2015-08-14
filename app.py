@@ -99,13 +99,13 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     @gen.coroutine
     def set_rooms(self, coordinates, device_token):
-        remove_user_from_rooms(device_token)
+        # remove_user_from_rooms(device_token)
         print('coordinates:', coordinates)
         yield gen.Task(self.client.unsubscribe, self.rooms)
         # GET THE ROOMS WITH COORDINATES
         latitude, longitude = coordinates.values()
         self.rooms = generate_neighbors(latitude, longitude)
-        add_user_to_rooms(self.rooms, device_token)
+        # add_user_to_rooms(self.rooms, device_token)
         yield gen.Task(self.client.subscribe, self.rooms)
         self.client.listen(self.on_message_published)
 
