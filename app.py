@@ -12,6 +12,7 @@ from tornado import escape
 import tornadoredis
 import json
 import redis
+from boto_sns import send_push
 
 PORT = 8888
 ADDRESS = '0.0.0.0'
@@ -40,7 +41,7 @@ def remove_user_from_rooms(device_token):
     """
 
     # Get the rooms that user in.
-    rooms = redis_connection.get(device_token)
+    rooms = redis_connection.smembers(device_token)
 
     for room in rooms:
         users_joined_room_key = "users_joined_%s" % room
@@ -124,6 +125,9 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         datadecoded = json.loads(data)
         if '_coordinates' in str(datadecoded):
             yield self.set_rooms(datadecoded.get('_coordinates'), datadecoded["token"])
+
+            # Send push notification to all receivers
+
             raise Return()
         message = {'body': datadecoded, 'id': str(uuid.uuid4())}
 
