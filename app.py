@@ -1,6 +1,6 @@
 import uuid
+import geohash
 from tornado.gen import Return
-
 from tornado.platform.asyncio import AsyncIOMainLoop
 import tornado.websocket
 import tornado.web
@@ -21,6 +21,10 @@ class MainHandler(tornado.web.RequestHandler):
 
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
+
+    def __init__(self, *args, **kwargs):
+        self.rooms = []
+        super().__init__(*args, **kwargs)
 
     def check_origin(self, origin):
         return True
@@ -43,11 +47,20 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         yield gen.Task(self.client.unsubscribe, self.rooms)
         # GET THE ROOMS WITH COORDINATES
         latitude, longitude = coordinates.values()
+        room = geohash.encode(latitude, longitude, precision=7)
+        neighbors = geohash.neighbors(room)
+        neighbors.append(room)
+        self.rooms = neighbors
         yield gen.Task(self.client.subscribe, self.rooms)
+        self.client.listen(self.on_message_published)
+
 
     def on_message_published(self, message):
         if not (message.kind == 'subscribe' or message.kind == 'unsubscribe'):
-            self.write_message(message.body)
+            message_id = json.loads(message.body).get('id')
+            if message_id not in self.messages_published:
+                self.messages_published.append(message_id)
+                self.write_message(message.body)
 
     @gen.coroutine
     def on_message(self, data):
@@ -56,7 +69,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         if '_coordinates' in str(datadecoded):
             yield self.set_rooms(datadecoded.get('_coordinates'))
             raise Return()
-        message = {'body': datadecoded}
+        message = {'body': datadecoded, 'id': str(uuid.uuid4())}
+
         for room in self.rooms:
             self.pubclient.publish(room, json.dumps(message))
 
