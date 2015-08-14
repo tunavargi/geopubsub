@@ -55,6 +55,7 @@ def generate_neighbors(latitude, longitude, precision=9):
     Generates neighbors of given coordinates and includes the coordinate itself.
     """
 
+    latitude, longitude = map(float, [latitude, longitude])
     room = geohash.encode(latitude, longitude, precision=precision)
     neighbors = geohash.neighbors(room)
     neighbors.append(room)
