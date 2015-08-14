@@ -127,6 +127,15 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
             yield self.set_rooms(datadecoded.get('_coordinates'), datadecoded["token"])
 
             # Send push notification to all receivers
+            members = list()
+            for room in self.rooms:
+                users_joined_room_key = "users_joined_%s" % room
+                members += redis_connection.smembers(users_joined_room_key)
+
+            members = list(set(members))
+
+            for member in members:
+                send_push(member, datadecoded["body"])
 
             raise Return()
         message = {'body': datadecoded, 'id': str(uuid.uuid4())}
