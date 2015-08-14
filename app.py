@@ -112,9 +112,10 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
     def on_message_published(self, message):
         if not (message.kind == 'subscribe' or message.kind == 'unsubscribe'):
             message_id = json.loads(message.body).get('id')
+            message = json.dumps(json.loads(message.body).get('body'))
             if message_id not in self.messages_published:
                 self.messages_published.append(message_id)
-                self.write_message(message.body)
+                self.write_message(message)
 
     @gen.coroutine
     def on_message(self, data):
