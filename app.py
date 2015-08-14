@@ -8,16 +8,72 @@ import tornado.options
 import tornado.httpserver
 import asyncio
 from tornado import gen
+from tornado import escape
 import tornadoredis
 import json
+import redis
 
 PORT = 8888
 ADDRESS = '0.0.0.0'
+
+redis_connection = redis.StrictRedis(host='localhost', port=6379, db=0)
+
+
+def add_user_to_rooms(rooms, device_token):
+    """
+    Adds user to rooms.
+    """
+
+    # This stores rooms that user in.
+    redis_connection.sadd(device_token, *rooms)
+
+    # We need to store device_tokens in order to send push notifications.
+    for room in rooms:
+        # This stores users joined to a specific room.
+        users_joined_room_key = "users_joined_%s" % room
+        redis_connection.sadd(users_joined_room_key, device_token)
+
+
+def remove_user_from_rooms(device_token):
+    """
+    Removes user from rooms that she/he joined.
+    """
+
+    # Get the rooms that user in.
+    rooms = redis_connection.get(device_token)
+
+    for room in rooms:
+        users_joined_room_key = "users_joined_%s" % room
+        redis_connection.srem(users_joined_room_key, device_token)
+
+    # Clear rooms that user in.
+    redis_connection.delete(device_token)
+
+
+def generate_neighbors(latitude, longitude, precision=7):
+    """
+    Generates neighbors of given coordinates and includes the coordinate itself.
+    """
+
+    room = geohash.encode(latitude, longitude, precision=precision)
+    neighbors = geohash.neighbors(room)
+    neighbors.append(room)
+
+    return neighbors
 
 
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
         self.render("templates/test.html")
+
+
+class CoordinateUpdateHandler(tornado.web.RequestHandler):
+    def post(self):
+        data = escape.json_decode(self.request.body)
+        device_token = data["token"]
+        latitude, longitude = data["_coordinates"].values()
+        rooms = generate_neighbors(latitude, longitude)
+        add_user_to_rooms(rooms, device_token)
 
 
 class WebSocketHandler(tornado.websocket.WebSocketHandler):
@@ -42,18 +98,16 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         self.client.listen(self.on_message_published)
 
     @gen.coroutine
-    def set_rooms(self, coordinates):
+    def set_rooms(self, coordinates, device_token):
+        remove_user_from_rooms(device_token)
         print('coordinates:', coordinates)
         yield gen.Task(self.client.unsubscribe, self.rooms)
         # GET THE ROOMS WITH COORDINATES
         latitude, longitude = coordinates.values()
-        room = geohash.encode(latitude, longitude, precision=7)
-        neighbors = geohash.neighbors(room)
-        neighbors.append(room)
-        self.rooms = neighbors
+        self.rooms = generate_neighbors(latitude, longitude)
+        add_user_to_rooms(self.rooms, device_token)
         yield gen.Task(self.client.subscribe, self.rooms)
         self.client.listen(self.on_message_published)
-
 
     def on_message_published(self, message):
         if not (message.kind == 'subscribe' or message.kind == 'unsubscribe'):
@@ -67,7 +121,7 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         print(data)
         datadecoded = json.loads(data)
         if '_coordinates' in str(datadecoded):
-            yield self.set_rooms(datadecoded.get('_coordinates'))
+            yield self.set_rooms(datadecoded.get('_coordinates'), datadecoded["token"])
             raise Return()
         message = {'body': datadecoded, 'id': str(uuid.uuid4())}
 
@@ -80,7 +134,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
 application = tornado.web.Application([
     (r'/msg', WebSocketHandler),
-    (r'/', MainHandler)
+    (r'/', MainHandler),
+    (r'/coordinate-sync', CoordinateUpdateHandler)
 ])
 
 
