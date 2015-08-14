@@ -1,0 +1,68 @@
+<html>
+<head>
+<link rel="stylesheet" href="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.css" />
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css" />
+
+<style>
+    #map { height: 300px; }
+</style>
+
+
+
+</head>
+<body>
+<div class="row">
+
+  <div class="col-md-6">
+    <h3> MAP </h3>
+
+     <div id="map"></div>
+  </div>
+
+
+  <div class="col-md-6">
+    <h3> TALKS </h3>
+    <div class='talks'>
+    </div>
+    <input id='message'/>
+    <button id='submit'>SEND</button>
+  </div>
+
+
+</body>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.0.0-alpha1/jquery.min.js"></script>
+
+<script src="http://cdn.leafletjs.com/leaflet-0.7.3/leaflet.js"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+
+<script>
+    var socketconnection = new WebSocket("ws://localhost:8888/msg");
+    var map = L.map('map').setView([51.505, -0.09], 13);
+    L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+    
+
+    function onMapClick(e) {
+        socketconnection.send(JSON.stringify({'_coordinates': e.latlng}));
+    }
+
+    map.on('click', onMapClick);
+    socketconnection.onmessage = function (event) {
+        var message = JSON.parse(event.data)
+        message = message.body.message
+        $('.talks').append("<p>" + message + "</p>")}
+
+    $('#submit').on('click', function(event){
+        socketconnection.send(JSON.stringify({'message': $('#message').val()}));
+        $('#message').val("")
+    })
+
+
+
+
+
+</script>
