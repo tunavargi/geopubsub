@@ -51,7 +51,7 @@ def remove_user_from_rooms(device_token):
     redis_connection.delete(device_token)
 
 
-def generate_neighbors(latitude, longitude, precision=9):
+def generate_neighbors(latitude, longitude, precision=7):
     """
     Generates neighbors of given coordinates and includes the coordinate itself.
     """
