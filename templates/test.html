@@ -38,22 +38,33 @@
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
 
 <script>
+
+
+    var rand = function() {
+        return Math.random().toString(36).substr(2); // remove `0.`
+    };
+
+    var token = function() {
+        return rand() + rand(); // to make it longer
+    };
+
+    var token = token()
     var socketconnection = new WebSocket("ws://localhost:8888/msg");
     var map = L.map('map').setView([51.505, -0.09], 13);
     L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '&copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
     }).addTo(map);
-    
+
 
     function onMapClick(e) {
-        socketconnection.send(JSON.stringify({'_coordinates': e.latlng}));
+        socketconnection.send(JSON.stringify({'_coordinates': e.latlng, 'token': token}));
     }
 
     map.on('click', onMapClick);
     socketconnection.onmessage = function (event) {
         var message = JSON.parse(event.data)
-        message = message.body.message
+        message = message.message
         $('.talks').append("<p>" + message + "</p>")}
 
     $('#submit').on('click', function(event){

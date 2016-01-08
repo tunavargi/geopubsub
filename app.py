@@ -1,18 +1,15 @@
 import uuid
 import geohash
 from tornado.gen import Return
-from tornado.platform.asyncio import AsyncIOMainLoop
 import tornado.websocket
 import tornado.web
 import tornado.options
 import tornado.httpserver
-import asyncio
 from tornado import gen
 from tornado import escape
 import tornadoredis
 import json
 import redis
-from boto_sns import send_push
 
 PORT = 8888
 ADDRESS = '0.0.0.0'
@@ -24,7 +21,6 @@ def add_user_to_rooms(rooms, device_token):
     """
     Adds user to rooms.
     """
-
     # This stores rooms that user in.
     redis_connection.sadd(device_token, *rooms)
 
@@ -51,7 +47,7 @@ def remove_user_from_rooms(device_token):
     redis_connection.delete(device_token)
 
 
-def generate_neighbors(latitude, longitude, precision=7):
+def generate_neighbors(latitude, longitude, precision=5):
     """
     Generates neighbors of given coordinates and includes the coordinate itself.
     """
@@ -82,11 +78,11 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     def __init__(self, *args, **kwargs):
         self.rooms = []
-        super().__init__(*args, **kwargs)
+        super(WebSocketHandler, self).__init__(*args, **kwargs)
 
     def check_origin(self, origin):
         return True
-    
+
     @gen.coroutine
     def open(self, *args, **kwargs):
         # CONNECT AND GET THE ROOMS
@@ -99,15 +95,17 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         yield gen.Task(self.client.subscribe, self.rooms)
         self.client.listen(self.on_message_published)
 
+
     @gen.coroutine
     def set_rooms(self, coordinates, device_token):
-        # remove_user_from_rooms(device_token)
-        print('coordinates:', coordinates)
+
+        remove_user_from_rooms(device_token)
         yield gen.Task(self.client.unsubscribe, self.rooms)
         # GET THE ROOMS WITH COORDINATES
         latitude, longitude = coordinates.values()
         self.rooms = generate_neighbors(latitude, longitude)
-        # add_user_to_rooms(self.rooms, device_token)
+
+        add_user_to_rooms(self.rooms, device_token)
         yield gen.Task(self.client.subscribe, self.rooms)
         self.client.listen(self.on_message_published)
 
@@ -121,25 +119,21 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
 
     @gen.coroutine
     def on_message(self, data):
-        print(data)
         datadecoded = json.loads(data)
         if '_coordinates' in str(datadecoded):
-            yield self.set_rooms(datadecoded.get('_coordinates'), datadecoded["token"])
+            yield self.set_rooms(datadecoded.get('_coordinates'),
+                                 datadecoded["token"])
 
-            # Send push notification to all receivers
             members = list()
             for room in self.rooms:
                 users_joined_room_key = "users_joined_%s" % room
                 members += redis_connection.smembers(users_joined_room_key)
 
             members = list(set(members))
-
-            for member in members:
-                send_push(member, datadecoded["body"])
-
             raise Return()
-        message = {'body': datadecoded, 'id': str(uuid.uuid4())}
 
+        message = {'body': datadecoded, 'id': str(uuid.uuid4())}
+        print message
         for room in self.rooms:
             self.pubclient.publish(room, json.dumps(message))
 
@@ -155,9 +149,10 @@ application = tornado.web.Application([
 
 
 def main():
-    tornado.platform.asyncio.AsyncIOMainLoop().install()
-    application.listen(8888)
-    asyncio.get_event_loop().run_forever()
+    http_server = tornado.httpserver.HTTPServer(application)
+    http_server.listen(8888)
+    main_loop = tornado.ioloop.IOLoop.instance()
+    main_loop.start()
 
 if __name__ == '__main__':
     main()
